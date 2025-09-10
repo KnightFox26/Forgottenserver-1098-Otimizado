@@ -2443,6 +2443,32 @@ void ProtocolGame::sendEnterWorld() {
 	writeToOutputBuffer(msg);
 }
 
+void ProtocolGame::sendFeatures() {
+    if (!player || player->getOperatingSystem() < CLIENTOS_OTCLIENT_LINUX) {
+        return;
+    }
+    // Advertise OTCv8 features - only basic features for extended viewport
+    // Opcode matches Proto::GameServerFeatures (67 / 0x43) on the client
+    NetworkMessage msg;
+    msg.addByte(0x43);
+    // Enable only GameChangeMapAwareRange (30) for extended viewport
+    msg.add<uint16_t>(1);
+    msg.addByte(30); msg.addByte(1); // GameChangeMapAwareRange
+    writeToOutputBuffer(msg);
+}
+
+void ProtocolGame::sendChangeMapAwareRange(uint8_t xrange, uint8_t yrange) {
+    if (!player || player->getOperatingSystem() < CLIENTOS_OTCLIENT_LINUX) {
+        return;
+    }
+    NetworkMessage msg;
+    // Proto::GameServerChangeMapAwareRange = 66 (0x42)
+    msg.addByte(0x42);
+    msg.addByte(xrange);
+    msg.addByte(yrange);
+    writeToOutputBuffer(msg);
+}
+
 void ProtocolGame::sendFightModes() {
 	NetworkMessage msg;
 	msg.addByte(0xA7);
@@ -2518,6 +2544,9 @@ void ProtocolGame::sendAddCreature(const Creature* creature, const Position& pos
 
 	sendPendingStateEntered();
 	sendEnterWorld();
+	sendFeatures();
+	// Send aware range (OTCv8) before map description so client adjusts viewport
+	sendChangeMapAwareRange(Map::maxClientViewportX * 2, Map::maxClientViewportY * 2);
 	sendMapDescription(pos);
 
 	if (magicEffect != CONST_ME_NONE) {

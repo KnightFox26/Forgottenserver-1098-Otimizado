@@ -214,6 +214,7 @@ class ProtocolGame final : public Protocol {
 
 		void sendPendingStateEntered();
 		void sendEnterWorld();
+		void sendFeatures();
 
 		void sendFightModes();
 
@@ -227,6 +228,7 @@ class ProtocolGame final : public Protocol {
 
 		//tiles
 		void sendMapDescription(const Position& pos);
+		void sendChangeMapAwareRange(uint8_t xrange, uint8_t yrange);
 
 		void sendAddTileItem(const Position& pos, uint32_t stackpos, const Item* item);
 		void sendUpdateTileItem(const Position& pos, uint32_t stackpos, const Item* item);
