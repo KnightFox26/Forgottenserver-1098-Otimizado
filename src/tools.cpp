@@ -368,6 +368,7 @@ MagicEffectNames magicEffectNames = {
 	{"smoke",		CONST_ME_SMOKE},
 	{"insects",		CONST_ME_INSECTS},
 	{"dragonhead",		CONST_ME_DRAGONHEAD},
+	{"semfim",		CONST_ME_SEMFIM},
 	{"orcshaman",		CONST_ME_ORCSHAMAN},
 	{"orcshamanfire",	CONST_ME_ORCSHAMAN_FIRE},
 	{"thunder",		CONST_ME_THUNDER},

@@ -2296,15 +2296,16 @@ void ProtocolGame::sendDistanceShoot(const Position& from, const Position& to, u
 	writeToOutputBuffer(msg);
 }
 
-void ProtocolGame::sendMagicEffect(const Position& pos, uint8_t type) {
-	if (!canSee(pos)) {
+void ProtocolGame::sendMagicEffect(const Position& pos, uint16_t type)
+{
+		if (!canSee(pos)) {
 		return;
 	}
 
 	NetworkMessage msg;
 	msg.addByte(0x83);
 	msg.addPosition(pos);
-	msg.addByte(type);
+	msg.add<uint16_t>(type);
 	writeToOutputBuffer(msg);
 }
 
@@ -2452,8 +2453,9 @@ void ProtocolGame::sendFeatures() {
     NetworkMessage msg;
     msg.addByte(0x43);
     // Enable only GameChangeMapAwareRange (30) for extended viewport
-    msg.add<uint16_t>(1);
+    msg.add<uint16_t>(2);
     msg.addByte(30); msg.addByte(1); // GameChangeMapAwareRange
+	msg.addByte(16); msg.addByte(1); // GameMagicEffectU16
     writeToOutputBuffer(msg);
 }
 
