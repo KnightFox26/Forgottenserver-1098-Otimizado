@@ -48,6 +48,15 @@ class ProtocolGame final : public Protocol {
 
 		explicit ProtocolGame(Connection_ptr connection) : Protocol(connection) {}
 
+		// Data source: lists for outfit extensions
+		struct OutfitExtensionLists {
+			std::vector<std::pair<uint16_t, std::string>> wings;
+			std::vector<std::pair<uint16_t, std::string>> auras;
+			std::vector<std::pair<uint16_t, std::string>> shaders;
+			std::vector<std::pair<uint16_t, std::string>> healthBars;
+			std::vector<std::pair<uint16_t, std::string>> manaBars;
+		};
+
 		void login(const std::string& name, uint32_t accountId, OperatingSystem_t operatingSystem);
 		void logout(bool displayEffect, bool forced);
 

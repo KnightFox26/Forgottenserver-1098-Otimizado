@@ -268,6 +268,28 @@ bool IOLoginData::loadPlayer(Player* player, DBResult_ptr result) {
 	player->defaultOutfit.lookAddons = result->getNumber<uint16_t>("lookaddons");
 	player->currentOutfit = player->defaultOutfit;
 	player->currentMount = result->getNumber<uint16_t>("currentmount");
+
+	// Apply outfit extensions from storage to default/current outfit after storages are loaded
+	{
+		constexpr uint32_t STORAGE_WINGS = 51000;
+		constexpr uint32_t STORAGE_AURA = 51001;
+		constexpr uint32_t STORAGE_SHADER = 51002;
+		constexpr uint32_t STORAGE_HEALTHBAR = 51003;
+		constexpr uint32_t STORAGE_MANABAR = 51004;
+
+		Outfit_t outfit = player->getDefaultOutfit();
+		if (auto v = player->getStorageValue(STORAGE_WINGS)) outfit.lookWings = std::max<int32_t>(0, v.value());
+		if (auto v = player->getStorageValue(STORAGE_AURA)) outfit.lookAura = std::max<int32_t>(0, v.value());
+		if (auto v = player->getStorageValue(STORAGE_HEALTHBAR)) outfit.lookHealthBar = std::max<int32_t>(0, v.value());
+		if (auto v = player->getStorageValue(STORAGE_MANABAR)) outfit.lookManaBar = std::max<int32_t>(0, v.value());
+		if (auto v = player->getStorageValue(STORAGE_SHADER)) {
+			// Note: We can't access g_outfitExtensionLists here as it's not available in this context
+			// The shader will be applied later in the protocol layer
+			outfit.lookShader = ""; // Will be set later
+		}
+		player->defaultOutfit = outfit;
+		player->currentOutfit = outfit;
+	}
 	player->direction = static_cast<Direction> (result->getNumber<uint16_t>("direction"));
 
 	if (g_game.getWorldType() != WORLD_TYPE_PVP_ENFORCED) {

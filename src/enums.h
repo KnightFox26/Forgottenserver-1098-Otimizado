@@ -488,6 +488,12 @@ struct Outfit_t {
 	uint8_t lookLegs = 0;
 	uint8_t lookFeet = 0;
 	uint8_t lookAddons = 0;
+    // OTCv8 outfit extensions (used only when the client supports features)
+    uint16_t lookWings = 0;
+    uint16_t lookAura = 0;
+    std::string lookShader = "";
+    uint16_t lookHealthBar = 0;
+    uint16_t lookManaBar = 0;
 };
 
 struct LightInfo {

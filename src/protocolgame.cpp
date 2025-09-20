@@ -4,6 +4,7 @@
 #include "otpch.h"
 
 #include "protocolgame.h"
+#include <pugixml.hpp>
 
 #include "ban.h"
 #include "condition.h"
@@ -22,6 +23,8 @@
 
 extern CreatureEvents* g_creatureEvents;
 extern Chat* g_chat;
+
+ProtocolGame::OutfitExtensionLists g_outfitExtensionLists;
 
 namespace {
 
@@ -220,6 +223,55 @@ void ProtocolGame::login(const std::string& name, uint32_t accountId, OperatingS
 void ProtocolGame::connect(uint32_t playerId, OperatingSystem_t operatingSystem) {
 	// dispatcher thread
 
+	// Load outfit extensions
+	pugi::xml_document doc;
+	pugi::xml_parse_result result = doc.load_file("data/XML/outfit_extensions.xml");
+	if (result) {
+		auto wingsNode = doc.child("outfitExtensions").child("wings");
+		g_outfitExtensionLists.wings.clear();
+		for (auto node : wingsNode.children("wing")) {
+			uint16_t id = node.attribute("id").as_uint();
+			std::string name = node.attribute("name").as_string();
+			if (id > 0) g_outfitExtensionLists.wings.emplace_back(id, name);
+		}
+
+		auto aurasNode = doc.child("outfitExtensions").child("auras");
+		g_outfitExtensionLists.auras.clear();
+		for (auto node : aurasNode.children("aura")) {
+			uint16_t id = node.attribute("id").as_uint();
+			std::string name = node.attribute("name").as_string();
+			if (id > 0) g_outfitExtensionLists.auras.emplace_back(id, name);
+		}
+
+		auto shadersNode = doc.child("outfitExtensions").child("shaders");
+		g_outfitExtensionLists.shaders.clear();
+		for (auto node : shadersNode.children("shader")) {
+			uint16_t id = node.attribute("id").as_uint();
+			std::string name = node.attribute("name").as_string();
+			if (id > 0 && !name.empty()) g_outfitExtensionLists.shaders.emplace_back(id, name);
+		}
+
+		auto hbNode = doc.child("outfitExtensions").child("healthBars");
+		g_outfitExtensionLists.healthBars.clear();
+		for (auto node : hbNode.children("bar")) {
+			uint16_t id = node.attribute("id").as_uint();
+			std::string name = node.attribute("name").as_string();
+			if (id > 0) {
+				g_outfitExtensionLists.healthBars.emplace_back(id, name);
+			}
+		}
+
+		auto mbNode = doc.child("outfitExtensions").child("manaBars");
+		g_outfitExtensionLists.manaBars.clear();
+		for (auto node : mbNode.children("bar")) {
+			uint16_t id = node.attribute("id").as_uint();
+			std::string name = node.attribute("name").as_string();
+			if (id > 0) {
+				g_outfitExtensionLists.manaBars.emplace_back(id, name);
+			}
+		}
+	}
+
 	eventConnect = 0;
 
 	Player* foundPlayer = g_game.getPlayerByID(playerId);
@@ -248,6 +300,32 @@ void ProtocolGame::connect(uint32_t playerId, OperatingSystem_t operatingSystem)
 	player->lastLoginSaved = std::max<time_t>(time(nullptr), player->lastLoginSaved + 1);
 	player->resetIdleTime();
 	acceptPackets = true;
+
+	// Reaplicar extensões persistidas do storage no login e propagar aos espectadores
+	if (operatingSystem >= CLIENTOS_OTCLIENT_LINUX) {
+		constexpr uint32_t STORAGE_WINGS = 51000;
+		constexpr uint32_t STORAGE_AURA = 51001;
+		constexpr uint32_t STORAGE_SHADER = 51002;
+		constexpr uint32_t STORAGE_HEALTHBAR = 51003;
+		constexpr uint32_t STORAGE_MANABAR = 51004;
+
+		Outfit_t outfit = player->getDefaultOutfit();
+		if (auto v = player->getStorageValue(STORAGE_WINGS)) outfit.lookWings = std::max<int32_t>(0, v.value());
+		if (auto v = player->getStorageValue(STORAGE_AURA)) outfit.lookAura = std::max<int32_t>(0, v.value());
+		if (auto v = player->getStorageValue(STORAGE_HEALTHBAR)) outfit.lookHealthBar = std::max<int32_t>(0, v.value());
+		if (auto v = player->getStorageValue(STORAGE_MANABAR)) outfit.lookManaBar = std::max<int32_t>(0, v.value());
+		if (auto v = player->getStorageValue(STORAGE_SHADER)) {
+			uint16_t shaderId = std::max<int32_t>(0, v.value());
+			for (const auto& entry : g_outfitExtensionLists.shaders) {
+				if (entry.first == shaderId) {
+					outfit.lookShader = entry.second;
+					break;
+				}
+			}
+		}
+		player->defaultOutfit = outfit;
+		g_game.internalCreatureChangeOutfit(player, outfit);
+	}
 
 	g_creatureEvents->playerReconnect(player);
 }
@@ -811,13 +889,58 @@ void ProtocolGame::parseSetOutfit(NetworkMessage& msg) {
 	newOutfit.lookFeet = msg.getByte();
 	newOutfit.lookAddons = msg.getByte();
 	newOutfit.lookMount = msg.get<uint16_t>();
+
+	// OTCv8 outfit extensions
+	if (player && player->getOperatingSystem() >= CLIENTOS_OTCLIENT_LINUX) {
+		newOutfit.lookWings = msg.get<uint16_t>();
+		newOutfit.lookAura = msg.get<uint16_t>();
+		newOutfit.lookShader = msg.getString();
+		newOutfit.lookHealthBar = msg.get<uint16_t>();
+		newOutfit.lookManaBar = msg.get<uint16_t>();
+	}
+
 	g_dispatcher.addTask([=, playerID = player->getID()]() {
 		g_game.playerChangeOutfit(playerID, newOutfit);
+
+		// Persist outfit extensions in player storage (so they survive logout/death)
+		Player* pl = g_game.getPlayerByID(playerID);
+		if (pl) {
+			constexpr uint32_t STORAGE_WINGS = 51000;
+			constexpr uint32_t STORAGE_AURA = 51001;
+			constexpr uint32_t STORAGE_SHADER = 51002; // stores shader id from XML list
+			constexpr uint32_t STORAGE_HEALTHBAR = 51003;
+			constexpr uint32_t STORAGE_MANABAR = 51004;
+
+			pl->setStorageValue(STORAGE_WINGS, newOutfit.lookWings);
+			pl->setStorageValue(STORAGE_AURA, newOutfit.lookAura);
+			pl->setStorageValue(STORAGE_HEALTHBAR, newOutfit.lookHealthBar);
+			pl->setStorageValue(STORAGE_MANABAR, newOutfit.lookManaBar);
+
+			// Convert shader name to ID for storage
+			uint16_t shaderId = 0;
+			for (const auto& entry : g_outfitExtensionLists.shaders) {
+				if (entry.second == newOutfit.lookShader) {
+					shaderId = entry.first;
+					break;
+				}
+			}
+			pl->setStorageValue(STORAGE_SHADER, shaderId);
+		}
 	});
 }
 
 void ProtocolGame::parseToggleMount(NetworkMessage& msg) {
 	bool mount = msg.getByte() != 0;
+	// Consume optional extension status bytes from OTClientV8
+	if (player && player->getOperatingSystem() >= CLIENTOS_OTCLIENT_LINUX) {
+		// wings, aura, shaderFlag, healthBarFlag, manaBarFlag (all uint8)
+		// We currently don't use them server-side, but read to keep packet in sync
+		(void)msg.getByte();
+		(void)msg.getByte();
+		(void)msg.getByte();
+		(void)msg.getByte();
+		(void)msg.getByte();
+	}
 	g_dispatcher.addTask([=, playerID = player->getID()]() {
 		g_game.playerToggleMount(playerID, mount);
 	});
@@ -2448,14 +2571,24 @@ void ProtocolGame::sendFeatures() {
     if (!player || player->getOperatingSystem() < CLIENTOS_OTCLIENT_LINUX) {
         return;
     }
-    // Advertise OTCv8 features - only basic features for extended viewport
+    // Advertise OTCv8 features so client parses outfit extensions
     // Opcode matches Proto::GameServerFeatures (67 / 0x43) on the client
     NetworkMessage msg;
     msg.addByte(0x43);
-    // Enable only GameChangeMapAwareRange (30) for extended viewport
-    msg.add<uint16_t>(2);
-    msg.addByte(30); msg.addByte(1); // GameChangeMapAwareRange
-	msg.addByte(16); msg.addByte(1); // GameMagicEffectU16
+    // List of (featureId, enabled) pairs count
+    // Enable: LooktypeU16 (42), PlayerAddons(44), PlayerMounts(12), WingsAndAura(104), OutfitShaders(106),
+    // HealthInfoBackground(113), DrawAuraOnTop(109), WingOffset(114), AuraFrontAndBack(115), GameMagicEffectU16(16)
+    msg.add<uint16_t>(10);
+    msg.addByte(42); msg.addByte(1);
+    msg.addByte(44); msg.addByte(1);
+    msg.addByte(12); msg.addByte(1);
+    msg.addByte(104); msg.addByte(1);
+    msg.addByte(106); msg.addByte(1);
+    msg.addByte(113); msg.addByte(1);
+    msg.addByte(109); msg.addByte(1);
+    msg.addByte(114); msg.addByte(1);
+    msg.addByte(115); msg.addByte(1);
+    msg.addByte(16); msg.addByte(1); // GameMagicEffectU16
     writeToOutputBuffer(msg);
 }
 
@@ -2822,6 +2955,41 @@ void ProtocolGame::sendOutfitWindow() {
 		msg.addString(mount->name);
 	}
 
+	// OTCv8 optional extensions for outfit window
+	if (player->getOperatingSystem() >= CLIENTOS_OTCLIENT_LINUX) {
+		// Wings and Auras list
+		msg.addByte(std::min<size_t>(g_outfitExtensionLists.wings.size(), std::numeric_limits<uint8_t>::max()));
+		for (const auto& [id, name] : g_outfitExtensionLists.wings) {
+			msg.add<uint16_t>(id);
+			msg.addString(name);
+		}
+
+		msg.addByte(std::min<size_t>(g_outfitExtensionLists.auras.size(), std::numeric_limits<uint8_t>::max()));
+		for (const auto& [id, name] : g_outfitExtensionLists.auras) {
+			msg.add<uint16_t>(id);
+			msg.addString(name);
+		}
+
+		// Shaders list
+		msg.addByte(std::min<size_t>(g_outfitExtensionLists.shaders.size(), std::numeric_limits<uint8_t>::max()));
+		for (const auto& [id, name] : g_outfitExtensionLists.shaders) {
+			msg.add<uint16_t>(id);
+			msg.addString(name);
+		}
+
+		// Health/Mana bar styles
+		msg.addByte(std::min<size_t>(g_outfitExtensionLists.healthBars.size(), std::numeric_limits<uint8_t>::max()));
+		for (const auto& [id, name] : g_outfitExtensionLists.healthBars) {
+			msg.add<uint16_t>(id);
+			msg.addString(name);
+		}
+		msg.addByte(std::min<size_t>(g_outfitExtensionLists.manaBars.size(), std::numeric_limits<uint8_t>::max()));
+		for (const auto& [id, name] : g_outfitExtensionLists.manaBars) {
+			msg.add<uint16_t>(id);
+			msg.addString(name);
+		}
+	}
+
 	writeToOutputBuffer(msg);
 }
 
@@ -3070,6 +3238,15 @@ void ProtocolGame::AddOutfit(NetworkMessage& msg, const Outfit_t& outfit) {
 	}
 
 	msg.add<uint16_t>(outfit.lookMount);
+
+	// OTCv8 outfit extensions
+	if (player && player->getOperatingSystem() >= CLIENTOS_OTCLIENT_LINUX) {
+		msg.add<uint16_t>(outfit.lookWings);
+		msg.add<uint16_t>(outfit.lookAura);
+		msg.addString(outfit.lookShader);
+		msg.add<uint16_t>(outfit.lookHealthBar);
+		msg.add<uint16_t>(outfit.lookManaBar);
+	}
 }
 
 void ProtocolGame::AddWorldLight(NetworkMessage& msg, LightInfo lightInfo) {

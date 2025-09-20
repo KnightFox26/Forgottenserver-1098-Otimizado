@@ -891,7 +891,14 @@ static Outfit_t getOutfit(lua_State* L, int32_t arg) {
 	outfit.lookTypeEx = lua::getField<uint16_t>(L, arg, "lookTypeEx");
 	outfit.lookType = lua::getField<uint16_t>(L, arg, "lookType");
 
-	lua_pop(L, 8);
+	// OTCv8 outfit extensions
+	outfit.lookWings = lua::getField<uint16_t>(L, arg, "lookWings");
+	outfit.lookAura = lua::getField<uint16_t>(L, arg, "lookAura");
+	outfit.lookShader = lua::getFieldString(L, arg, "lookShader");
+	outfit.lookHealthBar = lua::getField<uint16_t>(L, arg, "lookHealthBar");
+	outfit.lookManaBar = lua::getField<uint16_t>(L, arg, "lookManaBar");
+
+	lua_pop(L, 13);
 	return outfit;
 }
 
@@ -1066,7 +1073,7 @@ void lua::pushPosition(lua_State* L, const Position& position, int32_t stackpos 
 }
 
 void lua::pushOutfit(lua_State* L, const Outfit_t& outfit) {
-	lua_createtable(L, 0, 8);
+	lua_createtable(L, 0, 13);
 	setField(L, "lookType", outfit.lookType);
 	setField(L, "lookTypeEx", outfit.lookTypeEx);
 	setField(L, "lookHead", outfit.lookHead);
@@ -1075,6 +1082,12 @@ void lua::pushOutfit(lua_State* L, const Outfit_t& outfit) {
 	setField(L, "lookFeet", outfit.lookFeet);
 	setField(L, "lookAddons", outfit.lookAddons);
 	setField(L, "lookMount", outfit.lookMount);
+	// OTCv8 outfit extensions
+	setField(L, "lookWings", outfit.lookWings);
+	setField(L, "lookAura", outfit.lookAura);
+	setField(L, "lookShader", outfit.lookShader);
+	setField(L, "lookHealthBar", outfit.lookHealthBar);
+	setField(L, "lookManaBar", outfit.lookManaBar);
 }
 
 void lua::pushOutfit(lua_State* L, const Outfit* outfit) {

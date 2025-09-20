@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<outfitExtensions>
+    <wings>
+        <wing id="937" name="Red Wings" />
+    </wings>
+    <auras>
+        <aura id="934" name="Cosmic Aura" />
+    </auras>
+    <shaders>
+        <shader id="1" name="blue_loohs" />
+        <shader id="2" name="bloohs_green" />
+  
+    </shaders>
+    <healthBars>
+        <bar id="1" name="Animated Red" />
+    </healthBars>
+    <manaBars>
+        <bar id="1" name="Classic Blue" />
+        <bar id="2" name="Dark Blue" />
+        <bar id="3" name="Purple" />
+    </manaBars>
+</outfitExtensions>
